@@ -1,13 +1,15 @@
 <?php
 
+define ('TINYRAP_MAX_NUM_OF_ITEMS_PER_FEED', 50);
+
 function tinyrap_parse($text) {
   if ($feed = @simplexml_load_string($text)) {
   	if ($feed->channel && $feed->channel->item) {
-  	  return makeRssFeed($feed->channel, md5($feed->asXML()));
+  	  return makeRssFeed($feed->channel);
   	} else if ($feed->channel && $feed->item) {
-  		return makeRssFeed($feed, md5($feed->asXML()));
+  		return makeRssFeed($feed);
   	} else if ($feed->getName() == 'feed') {
-  		return makeAtomFeed($feed, md5($feed->asXML()));
+  		return makeAtomFeed($feed);
   	}
   }
   
@@ -81,7 +83,7 @@ class Feed {
 	
 }
 
-function makeRssFeed($feed, $hash) {
+function makeRssFeed($feed) {
 	
 	$wf = new Feed();
 	
@@ -91,7 +93,6 @@ function makeRssFeed($feed, $hash) {
 		$wf->link = (string)$feed->channel->link;
 		$wf->description = (string)$feed->channel->description;
 		$wf->author = (string)$feed->channel->author;
-		$wf->hash = $hash;
 		
 	} else {
 		
@@ -99,19 +100,23 @@ function makeRssFeed($feed, $hash) {
 		$wf->link = (string)$feed->link;
 		$wf->description = (string)$feed->description;
 		$wf->author = (string)$feed->author;
-		$wf->hash = $hash;
 		
 	}
 	
 	$count = 1;
 	
 	foreach ($feed->item as $key=>$item) {
-	    
-		if ($count > 20) break;
+	     
+		if ($count > TINYRAP_MAX_NUM_OF_ITEMS_PER_FEED) break;
 		
 		$entry = new TinyRAPFeedEntry();
 	    
-	    $entry->setId($item->link);
+	    if (!empty($item->guid)) {
+	      $entry->setId($item->guid);
+	    }
+	    else {
+	      $entry->setId($item->link);
+	    }
 	    $entry->setLink($item->link);
 	    $entry->setTitle($item->title);
 	    $entry->setSummary($item->description);
@@ -177,11 +182,13 @@ function makeRssFeed($feed, $hash) {
 		
 	}
 	
+	$wf->hash = tinyrap_calculate_feed_hash($wf);
+	
 	return $wf;
 	
 }
 
-function makeAtomFeed($feed, $hash) {
+function makeAtomFeed($feed) {
 	
 	function getAtomLink($links) {
 		$link = null;
@@ -201,18 +208,23 @@ function makeAtomFeed($feed, $hash) {
 	$wf->title = (string) $feed->title;
 	$wf->link = (string) getAtomLink($feed->link);
 	$wf->description = (string) $feed->summary;
-	$wf->hash = $hash;
 	
 	$count = 1;
 	
 	foreach ($feed->entry as $key=>$item) {
 	    
-		if ($count > 20) break;
+		if ($count > TINYRAP_MAX_NUM_OF_ITEMS_PER_FEED) break;
 		
-		$link = getAtomLink($item->link);
 		$entry = new TinyRAPFeedEntry();
 	    
-	    $entry->setId($link);
+	    if (!empty($item->id)) {
+	      $entry->setId($item->id);
+	    }
+	    else {
+    		$link = getAtomLink($item->link);
+	      $entry->setId($item->link);
+	    }
+	    
 	    $entry->setLink($link);
 	    $entry->setTitle($item->title);
 	    $entry->setSummary($item->summary);
@@ -225,6 +237,25 @@ function makeAtomFeed($feed, $hash) {
 	    
 	}
 	
+	$wf->hash = tinyrap_calculate_feed_hash($wf);
 	return $wf;
 	
 }	
+
+function tinyrap_calculate_feed_hash($wf) {
+  $ids = array();
+  if (is_array($wf->entries)) {
+    foreach($wf->entries as $entry) {
+      $ids[] = $entry->id;
+    }
+    sort($ids);
+    $allids = "";
+    foreach ($ids as $id) {
+      $allids .= $id;
+    }
+    return md5($allids);
+  }
+  else {
+    return md5(microtime());
+  }
+}
