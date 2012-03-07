@@ -2,8 +2,15 @@
 
 define ('TINYRAP_MAX_NUM_OF_ITEMS_PER_FEED', 50);
 
-function tinyrap_parse($text) {
-  if ($feed = @simplexml_load_string($text)) {
+function tinyrap_parse($text, $suppress_errors = false) {
+
+  if ($suppress_errors) {
+      $feed = @simplexml_load_string($text);	
+  } else {
+      $feed = simplexml_load_string($text);	
+  }
+  
+  if ($feed) {
   	if ($feed->channel && $feed->channel->item) {
   	  return makeRssFeed($feed->channel);
   	} else if ($feed->channel && $feed->item) {
